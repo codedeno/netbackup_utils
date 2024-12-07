@@ -8,7 +8,7 @@ BP_TEST="/usr/openv/netbackup/bin/admincmd/bptestbpcd"
 BP_GETCONFIG="/usr/openv/netbackup/bin/admincmd/bpgetconfig"
 report_file="dc_client_report.csv"
 
-echo "Hostname, ping, IP, OS Version, OS, BPTEST,NB Version" > "${report_file}"
+echo "1 - Hostname,2 - ping,3 - IP,4 - OS Version,5 - OS,6 - BPTEST,7 - NB Version" > "${report_file}"
 
 bpplclients -allunique -noheader | sort -k3 | uniq | while read -r os version hst unk; do
         #       Interrogo NSLOOKUP per recuperare l'indirizzo IP
