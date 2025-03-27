@@ -1,6 +1,9 @@
 #!/bin/bash
 #Author		: Denis Gerolini
 #Email		: denis.gerolini@datacare.it
+# Licenza: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+# Per vedere una copia di questa licenza, visita http://creativecommons.org/licenses/by-nc-sa/4.0/
+
 
 #Descrizione:
 #	** tool non ufficiale Veritas, potrebbero esserci dei bug e riportare dati errati, quindi da utilizzare sempre e soltanto come strumento di ausilio **
