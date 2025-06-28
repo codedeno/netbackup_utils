@@ -1,4 +1,3 @@
-
 #############################
 ##RACCOLTA INFO POST DEPLOY##
 #############################
@@ -18,49 +17,161 @@
 #    3 - raccolta output sotto lo stesso path dello script
 #
 
-# Preferirei fornire delle variabili con indirizzi assoluti piuttosto che esportare il PATH
-export PATH=$PATH:/usr/openv/netbackup/bin:/usr/openv/netbackup/bin/admincmd:/usr/openv/netbackup/bin/goodies:/usr/openv/netbackup/bin/support:/usr/openv/volmgr/bin
 
-# Preferirei raccogliere gli output in una cartella presente nello stesso path dello script, è più facile andarli a recuperare
-DIR_OUT="/tmp/raccolta_dati_nbu_$(date +"%m_%d_%Y")"
-DIR_ZIP="/tmp/raccolta_dati_nbu_$(date +"%m_%d_%Y").tar"
-DIR_NBU="/usr/openv/netbackup"
+##################################	DENIS
+#	Path principali NetBackup
+OPENV="/usr/openv/"
+DIR_NBU="${OPENV}netbackup/"
+BIN="${DIR_NBU}bin/"
+ADMINCMD="${BIN}admincmd/"
+GOODIES="${BIN}goodies/"
+SUPPORT="${BIN}support/"
+DB="${OPENV}db/"
+VOLMGR="${OPENV}volmgr/bin/"
 
-# Preferirei già aver effettuato il login dato che successivamente viene richiesto comunque, ma verificherei l'utente che comunque lancia lo script (deve essere root)
-# Prompt iniziale per il login con loop per input valido
-while true; do
-    read -p "Prima di eseguire questo script, se ti trovi su NetBackup 10.5 o superiore, devi eseguire il login con il comando:
-bpnbat -login -loginType WEB
+#	Script principali NetBackup
+BPNBAT="${BIN}bpnbat"
+NBEMMCMD="${ADMINCMD}nbemmcmd"
+VMOPRCMD="${VOLMGR}vmoprcmd"
+VMRULE="${VOLMGR}vmrule"
+VXLOGCFG="${BIN}vxlogcfg"
+NBCERTCMD="${BIN}nbcertcmd"
+NBDB_PING="${DB}bin/nbdb_ping"
+BPPS="${BIN}bpps"
 
-Se non lo hai fatto, rispondi 'n', esegui il login e rilancia questo script. Altrimenti premi 'y' per continuare: " proceed
+#	Definizione percorso di output e file di log
+OUTPUT_FOLDER="output_$(date +"%d_%m_%Y")/"
+LOG_FILE="${OUTPUT_FOLDER}post_deploy.log"
+##################################	END DENIS
 
-    if [[ "$proceed" == "y" || "$proceed" == "Y" ]]; then
-        echo "Proseguo con l'esecuzione dello script..."
-        break
-    elif [[ "$proceed" == "n" || "$proceed" == "N" ]]; then
-        echo "Prima di rilanciare lo script, esegui il login con il comando: bpnbat -login -loginType WEB"
-        exit 1
-    else
-        echo "Input non valido. Rispondi con 'y' o 'n'."
-    fi
-done
+##################################	DENIS
+# Verifico se è stato effettuato il login con bpnbat
+bpnbat_status=$( ${BPNBAT} -WhoAmI 2>/dev/null)
+if [ $? -eq 0 ]; then
+	echo "Hai già effettuato il login come utente $( echo "${bpnbat_status}" | awk '$1 == "Name:" {print $2}'), continuo..."
+else
+	echo "WARNING: non hai effettuato il login bpnbat, alcune funzioni potrebbero non essere disponibili."
+fi	
 
-echo "stiamo raccoglinedo tutti i dati..."
-echo "creo una cartella temporanea sotto tmp"
-mkdir -p $DIR_OUT
-echo "raccolgo bp.conf"
-cp ${DIR_NBU}/bp.conf ${DIR_OUT}
-echo "raccolgo configurazione NBU"
-nbemmcmd -listh > ${DIR_OUT}/nbemmcmd.txt
-nbemmcmd -listsettings -machinename $(nbemmcmd -listh | grep ^primary | awk '{print $2}') -machinetype primary > ${DIR_OUT}/listemmsettings_audit.txt
-vmoprcmd > ${DIR_OUT}/vmoprcmd.txt
-df -h > ${DIR_OUT}/df_h.txt
-vxlogcfg -p nb -o default -l > ${DIR_OUT}/vxlogcfg.txt
-/usr/openv/db/bin/nbdb_ping > ${DIR_OUT}/nbdb_ping.txt
-nbcertcmd -listAllDomainCertificates > ${DIR_OUT}/Certs_Domain.txt
-nbcertcmd -listAllcertificates > ${DIR_OUT}/Certs_Lists.txt
-vmrule -listall >  ${DIR_OUT}/vmrules.txt
-date > ${DIR_OUT}/bpps.txt ; bpps -x >> ${DIR_OUT}/bpps.txt
+# Creo cartella di output
+mkdir -p ${OUTPUT_FOLDER}
+
+# Copia bp.conf
+echo -n "Copia di /usr/openv/netbackup/bp.conf... "
+cp "${DIR_NBU}bp.conf" "${OUTPUT_FOLDER}"
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Copio output nbemmcmd
+echo -n "Copio la lista host NBEMM... "
+nbemmcmd_list_hosts=$(${NBEMMCMD} -listh 2>/dev/null)
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+	echo "${nbemmcmd_list_hosts}" > ${OUTPUT_FOLDER}nbemmcmd.txt
+	if echo "${nbemmcmd_list_hosts}" | grep -q '^master'; then
+		machine_type="master"
+	else
+		machine_type="primary"
+	fi
+	echo -n  "Copio le configurazioni del ${machine_type} server... "
+	${NBEMMCMD} -listsettings -machinename $(echo "${nbemmcmd_list_hosts}" | grep -Ei '^primary|^master' | awk '{print $2}') -machinetype ${machine_type} > ${OUTPUT_FOLDER}listemmsettings_audit.txt 2>errori.txt
+	if [ $? -eq 0 ]; then
+		echo "SUCCESS"
+	else
+		echo "FAILED"
+	fi
+else
+	echo "FAILED"
+fi
+
+
+
+
+# Media server e drive status
+echo -n "Verifica status media e drive... "
+${VMOPRCMD} > "${OUTPUT_FOLDER}vmoprcmd.txt" 2>/dev/null
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Verifica spazio filesystem
+echo -n "Verifica spazio filesystem... "
+df -h > "${OUTPUT_FOLDER}df_h.txt" 2>/dev/null
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Verifica parametri di logging di default di vxlog
+echo -n "Verifica valori di default di vxlog... "
+${VXLOGCFG} -p nb -o default -l > "${OUTPUT_FOLDER}vxlogcfg.txt" 2>/dev/null
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Verifica se il DB NB è UP
+echo -n "Verifica lo stato di NBDB... "
+${NBDB_PING} > "${OUTPUT_FOLDER}nbdb_ping.txt" 2>errori.txt
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Recupero le informazioni sui certificati
+echo -n "Recupero informazioni dei certificati a livello di dominio... "
+${NBCERTCMD} -listAllDomainCertificates > "${OUTPUT_FOLDER}certs_domain.txt" 2>errori.txt
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+echo -n "Recupero informazioni dei certificati presenti sul Primary Server... "
+${NBCERTCMD} -listAllcertificates > "${OUTPUT_FOLDER}cert_list.txt" 2>errori.txt
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+
+# Esecuzione del comando vmrule
+echo -n "Eseguo VMRULE... "
+${VMRULE} -listall >"${OUTPUT_FOLDER}vmrules.txt" 2>errori.txt
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Verifica dei servizi attivi
+echo -n "Verifica dei servizi NetBackup attivi... "
+${BPPS} -x > "${OUTPUT_FOLDER}bpps_x.txt" 2>errori.txt
+if [ $? -eq 0 ]; then
+	echo "SUCCESS"
+else
+	echo "FAILED"
+fi
+
+# Verifico le impostazioni di rete
+echo -n "Verifico le impostazioni di rete... "
+if command -v ip &>/dev/null; then
+	echo "esi"
+	ip 
+elif command -v ifconfig &>/dev/null
+	echo "ifconfig"
+else
+fi
+
+exit 0
 
 # Non è detto che il comando ip sia presente
 ip a > ${DIR_OUT}/ip.txt
