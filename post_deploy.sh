@@ -342,7 +342,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo  -e "\n###############################################################################################################################"
-echo  "####### Scritp terminato, è stato creato il file ${OUTPUT_FOLDER}.tgz nella directory corrente contenente tutti i report"
+echo  "####### Scritp terminato, è stato creato il file ${tarout}.tgz nella directory corrente contenente tutti i report"
 echo  -e "###############################################################################################################################\n"
 echo ""
 if [ -s "${LOG_ERROR_FILE}" ]; then
